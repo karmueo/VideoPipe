@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
-project(trt_vehicle VERSION 1.0)
+project(trt_vehicle VERSION 1.0 LANGUAGES CXX CUDA)
+
+enable_language(CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Debug)
@@ -17,13 +19,31 @@ if(DEFINED VP_BUILD_FROM) # tell videopipe where is trt
     set(VP_TRT_INC_PATH ${TRT_INC_PATH} PARENT_SCOPE) 
 endif()
 
-# CUDA required
-find_package(CUDA REQUIRED) 
-message(STATUS "CUDA library status:")
-message(STATUS "    version: ${CUDA_VERSION}")
-message(STATUS "    libraries: ${CUDA_LIBRARIES}")
-message(STATUS "    include path: ${CUDA_INCLUDE_DIRS}")
-include_directories(${CUDA_INCLUDE_DIRS})
+# CUDA information
+message(STATUS "CUDA Compiler: ${CMAKE_CUDA_COMPILER}")
+message(STATUS "CUDA Toolkit Path: ${CMAKE_CUDA_TOOLKIT_ROOT_DIR}")
+message(STATUS "CUDA Language Enabled")
+
+# Set CUDA toolkit path explicitly for CUDA 12.9
+if(NOT CMAKE_CUDA_TOOLKIT_ROOT_DIR)
+    set(CMAKE_CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.9")
+endif()
+
+# Add CUDA include/link directories when the toolkit is present
+if(CMAKE_CUDA_TOOLKIT_ROOT_DIR)
+    if(EXISTS "${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/include")
+        include_directories(${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/include)
+    endif()
+    if(EXISTS "${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/include")
+        include_directories(${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/include)
+    endif()
+    if(EXISTS "${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/lib64")
+        link_directories(${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/lib64)
+    endif()
+    if(EXISTS "${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/lib")
+        link_directories(${CMAKE_CUDA_TOOLKIT_ROOT_DIR}/targets/x86_64-linux/lib)
+    endif()
+endif()
 
 # OpenCV required
 find_package(OpenCV REQUIRED)
@@ -34,7 +54,7 @@ message(STATUS "    include path: ${OpenCV_INCLUDE_DIRS}")
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # collect dependent libs for trt_vehicle
-set(TRT_VEHICLE_DEPEND_LIBS ${OpenCV_LIBS} ${CUDA_LIBRARIES} nvinfer stdc++fs)
+set(TRT_VEHICLE_DEPEND_LIBS ${OpenCV_LIBS} cuda nvinfer stdc++fs)
 
 # collect source files for trt_vehicle
 file(GLOB_RECURSE MODELS "models/*.cpp")

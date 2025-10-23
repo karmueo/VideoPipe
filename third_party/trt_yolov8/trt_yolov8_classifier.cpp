@@ -64,13 +64,7 @@ namespace trt_yolov8 {
     }
 
     void trt_yolov8_classifier::prepare_buffers(ICudaEngine* engine, float** gpu_input_buffer, float** gpu_output_buffer, float** cpu_input_buffer, float** output_buffer_host) {
-        assert(engine->getNbBindings() == 2);
-        // In order to bind the buffers, we need to know the names of the input and output tensors.
-        // Note that indices are guaranteed to be less than IEngine::getNbBindings()
-        const int inputIndex = engine->getBindingIndex(kInputTensorName);
-        const int outputIndex = engine->getBindingIndex(kOutputTensorName);
-        assert(inputIndex == 0);
-        assert(outputIndex == 1);
+        assert(engine->getNbIOTensors() == 2);
         // Create GPU buffers on device
         CUDA_CHECK(cudaMalloc((void**)gpu_input_buffer, kBatchSize * 3 * kClsInputH * kClsInputW * sizeof(float)));
         CUDA_CHECK(cudaMalloc((void**)gpu_output_buffer, kBatchSize * kOutputSize * sizeof(float)));
@@ -81,7 +75,12 @@ namespace trt_yolov8 {
 
     void trt_yolov8_classifier::infer(IExecutionContext& context, cudaStream_t& stream, void **buffers, float* input, float* output, int batchSize) {
         CUDA_CHECK(cudaMemcpyAsync(buffers[0], input, batchSize * 3 * kClsInputH * kClsInputW * sizeof(float), cudaMemcpyHostToDevice, stream));
-        context.enqueue(batchSize, buffers, stream, nullptr);
+        
+        // Set input and output tensor addresses for TensorRT 10+
+        context.setTensorAddress(kInputTensorName, buffers[0]);
+        context.setTensorAddress(kOutputTensorName, buffers[1]);
+        context.enqueueV3(stream);
+        
         CUDA_CHECK(cudaMemcpyAsync(output, buffers[1], batchSize * kOutputSize * sizeof(float), cudaMemcpyDeviceToHost, stream));
         cudaStreamSynchronize(stream);
     }

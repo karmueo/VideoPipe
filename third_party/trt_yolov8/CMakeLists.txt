@@ -21,6 +21,7 @@ message(STATUS "    version: ${CUDA_VERSION}")
 message(STATUS "    libraries: ${CUDA_LIBRARIES}")
 message(STATUS "    include path: ${CUDA_INCLUDE_DIRS}")
 include_directories(${CUDA_INCLUDE_DIRS})
+link_directories("/usr/local/cuda/targets/x86_64-linux/lib")
 
 # OpenCV required
 find_package(OpenCV)

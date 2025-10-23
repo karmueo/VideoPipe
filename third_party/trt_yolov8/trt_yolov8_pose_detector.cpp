@@ -58,13 +58,7 @@ namespace trt_yolov8 {
     void trt_yolov8_pose_detector::prepare_buffer(ICudaEngine* engine, float** input_buffer_device, float** output_buffer_device,
                         float** output_buffer_host, float** decode_ptr_host, float** decode_ptr_device,
                         std::string cuda_post_process) {
-        assert(engine->getNbBindings() == 2);
-        // In order to bind the buffers, we need to know the names of the input and output tensors.
-        // Note that indices are guaranteed to be less than IEngine::getNbBindings()
-        const int inputIndex = engine->getBindingIndex(kInputTensorName);
-        const int outputIndex = engine->getBindingIndex(kOutputTensorName);
-        assert(inputIndex == 0);
-        assert(outputIndex == 1);
+        assert(engine->getNbIOTensors() == 2);
         // Create GPU buffers on device
         CUDA_CHECK(cudaMalloc((void**)input_buffer_device, kBatchSize * 3 * kInputH * kInputW * sizeof(float)));
         CUDA_CHECK(cudaMalloc((void**)output_buffer_device, kBatchSize * kOutputSize * sizeof(float)));
@@ -85,7 +79,11 @@ namespace trt_yolov8 {
             float* decode_ptr_host, float* decode_ptr_device, int model_bboxes, std::string cuda_post_process) {
         // infer on the batch asynchronously, and DMA output back to host
         auto start = std::chrono::system_clock::now();
-        context.enqueue(batchsize, buffers, stream, nullptr);
+        
+        // Set input and output tensor addresses for TensorRT 10+
+        context.setTensorAddress(kInputTensorName, buffers[0]);
+        context.setTensorAddress(kOutputTensorName, buffers[1]);
+        context.enqueueV3(stream);
         if (cuda_post_process == "c") {
             CUDA_CHECK(cudaMemcpyAsync(output, buffers[1], batchsize * kOutputSize * sizeof(float), cudaMemcpyDeviceToHost,
                                     stream));
@@ -120,7 +118,7 @@ namespace trt_yolov8 {
         deserialize_engine(model_path, &runtime, &engine, &context);
         CUDA_CHECK(cudaStreamCreate(&stream));
         cuda_preprocess_init(kMaxInputImageSize);
-        auto out_dims = engine->getBindingDimensions(1);
+        auto out_dims = engine->getTensorShape(kOutputTensorName);
         model_bboxes = out_dims.d[0];
     }
     
