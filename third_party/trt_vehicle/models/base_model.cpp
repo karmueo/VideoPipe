@@ -6,9 +6,10 @@ namespace trt_vehicle{
     CudaPredictor::~CudaPredictor(){
         if (m_stream) cudaStreamDestroy(m_stream);
         mtx.lock();
-        if (m_context) m_context->destroy();
-        if (m_engine) m_engine->destroy();
-		if (m_runtime) m_runtime->destroy();
+        // TensorRT 10+ API: Use delete instead of destroy()
+        if (m_context) delete m_context;
+        if (m_engine) delete m_engine;
+        if (m_runtime) delete m_runtime;
         mtx.unlock();
     }
 
@@ -30,7 +31,8 @@ namespace trt_vehicle{
             file.close();
         }
         try {
-            m_engine = m_runtime->deserializeCudaEngine(trtModelStream.data(), size, nullptr);
+            // TensorRT 10+ API: deserializeCudaEngine only takes 2 parameters
+            m_engine = m_runtime->deserializeCudaEngine(trtModelStream.data(), size);
             if(m_engine == nullptr){
                 return -5;
             }
@@ -51,6 +53,14 @@ namespace trt_vehicle{
         if(ret != cudaSuccess){
             return -8;
         }
+        
+        // Store tensor names for TensorRT 10+ API
+        int nbIOTensors = m_engine->getNbIOTensors();
+        m_tensorNames.clear();
+        for (int i = 0; i < nbIOTensors; i++) {
+            m_tensorNames.push_back(m_engine->getIOTensorName(i));
+        }
+        
         return 0;
     }
 
@@ -79,13 +89,14 @@ namespace trt_vehicle{
     }
 
     int CudaPredictor::getSizeYolo(int& batch,int& inputSizeC,int& inputSizeH,int& inputSizeW,int& outputNum,int& classNum,int& boxNum){
-        auto dims0 = m_engine->getBindingDimensions(0);
+        // TensorRT 10+ API: Use getTensorShape instead of getBindingDimensions
+        auto dims0 = m_engine->getTensorShape(m_engine->getIOTensorName(0));
         batch = dims0.d[0];
         inputSizeH = dims0.d[1];
         inputSizeW = dims0.d[2];
         inputSizeC = dims0.d[3];
-        auto dims1 = m_engine->getBindingDimensions(1);
-        auto dims2 = m_engine->getBindingDimensions(2);
+        auto dims1 = m_engine->getTensorShape(m_engine->getIOTensorName(1));
+        auto dims2 = m_engine->getTensorShape(m_engine->getIOTensorName(2));
         outputNum = dims1.d[1];
         classNum = dims1.d[2];
         boxNum = dims2.d[3];
@@ -93,7 +104,8 @@ namespace trt_vehicle{
     }
 
     int CudaPredictor::getSize(int& batch,int& inputSizeC,int& inputSizeH,int& inputSizeW,int& outputDim1,int& outputDim2,int& outputDim3, NetworkInputType networkInputType){
-        auto dims0 = m_engine->getBindingDimensions(0);
+        // TensorRT 10+ API: Use getTensorShape instead of getBindingDimensions
+        auto dims0 = m_engine->getTensorShape(m_engine->getIOTensorName(0));
         batch = dims0.d[0];
         if (networkInputType == NetworkInputType::CHW)
         {
@@ -107,7 +119,7 @@ namespace trt_vehicle{
             inputSizeW = dims0.d[2];
             inputSizeC = dims0.d[3];
         }
-        auto dims1 = m_engine->getBindingDimensions(1);
+        auto dims1 = m_engine->getTensorShape(m_engine->getIOTensorName(1));
         outputDim1 = dims1.d[1];
         outputDim2 = dims1.d[2];
         outputDim3 = dims1.d[3];
@@ -121,12 +133,13 @@ namespace trt_vehicle{
     }
 
 	int CudaPredictor::getSizeVehicle(int& batch, int& inputSizeC, int& inputSizeH, int& inputSizeW, int& outputDim1, int& outputDim2, int& outputDim3) {
-		auto dims0 = m_engine->getBindingDimensions(0);
+		// TensorRT 10+ API: Use getTensorShape instead of getBindingDimensions
+		auto dims0 = m_engine->getTensorShape(m_engine->getIOTensorName(0));
 		batch = 1; // dims0.d[0];	//TODO 
 		inputSizeH = dims0.d[1];
 		inputSizeW = dims0.d[2];
 		inputSizeC = dims0.d[0];
-		auto dims1 = m_engine->getBindingDimensions(1);
+		auto dims1 = m_engine->getTensorShape(m_engine->getIOTensorName(1));
 		outputDim1 = dims1.d[0];
 		outputDim2 = dims1.d[1];
 		outputDim3 = dims1.d[2];
@@ -140,7 +153,12 @@ namespace trt_vehicle{
 	}
 
     int CudaPredictor::infer(vector<void *> &buffers, int batch){
-        bool ok = m_context->execute(batch, buffers.data());
+        // TensorRT 10+ API: Use setTensorAddress and enqueueV3 instead of execute
+        for (size_t i = 0; i < m_tensorNames.size() && i < buffers.size(); i++) {
+            m_context->setTensorAddress(m_tensorNames[i].c_str(), buffers[i]);
+        }
+        
+        bool ok = m_context->enqueueV3(m_stream);
         if(ok == false){
             return -1;
         }
@@ -241,9 +259,9 @@ namespace trt_vehicle{
         if(img.channels() == 1){
             cv::cvtColor(img,src,cv::COLOR_GRAY2RGB);
         }
-		else{
+        else{
             //src = img.clone();
-			src = img;
+            src = img;
         }
 		cv::Mat input;
         src.convertTo(input, CV_32FC3);

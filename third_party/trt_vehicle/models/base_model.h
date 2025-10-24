@@ -68,6 +68,9 @@ private:
     nvinfer1::ICudaEngine* m_engine = nullptr;
     nvinfer1::IExecutionContext* m_context = nullptr;
     cudaStream_t m_stream = nullptr;
+    
+    // Store tensor names for TensorRT 10+ API
+    std::vector<std::string> m_tensorNames;
 };
 
 class BaseModel{

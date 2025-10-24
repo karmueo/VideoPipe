@@ -45,6 +45,9 @@ if(CMAKE_CUDA_TOOLKIT_ROOT_DIR)
     endif()
 endif()
 
+# Add CUDA 12.9 library path for TensorRT 10
+link_directories("/usr/local/cuda/targets/x86_64-linux/lib")
+
 # OpenCV required
 find_package(OpenCV REQUIRED)
 message(STATUS "OpenCV library status:")
@@ -54,7 +57,7 @@ message(STATUS "    include path: ${OpenCV_INCLUDE_DIRS}")
 include_directories(${OpenCV_INCLUDE_DIRS})
 
 # collect dependent libs for trt_vehicle
-set(TRT_VEHICLE_DEPEND_LIBS ${OpenCV_LIBS} cuda nvinfer stdc++fs)
+set(TRT_VEHICLE_DEPEND_LIBS ${OpenCV_LIBS} cuda cudart nvinfer stdc++fs)
 
 # collect source files for trt_vehicle
 file(GLOB_RECURSE MODELS "models/*.cpp")
